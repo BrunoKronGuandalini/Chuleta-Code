@@ -1,0 +1,99 @@
+#include <IBusBM.h>
+#include <Cdrv8833.h>
+
+#define CH1 x
+#define CH2 y
+#define CH3 z
+
+int pinMotorD1 = 2;
+int pinMotorE1 = 3;
+int pinMotorD2 = 4;
+int pinMotorE2 = 5;
+int pinPWMD = 6;
+int pinPWME = 7;
+
+int CH1_velAngular;
+int CH2_velLinear;
+
+Cdrv8833 motorD;
+Cdrv8833 motorE;
+
+int Speed_D = 0, Speed_E = 0, Speed_D_PWM = 0, Speed_E_PWM = 0;
+
+bool CH3Value;
+
+int readChannel(int channelInput, int minLimit, int maxLimit, int defaultValue) {
+  int CH = pulseln(channelInput, HIGH, 30000);
+  if (CH < 100) return defaultValue;
+  return map(CH, 1000, 2000, minLimit, maxLimit);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(CH1, INPUT);
+  pinMode(CH2, INPUT);
+  pinMode(CH3, INPUT);
+
+  pinMode(pinMotorD1, OUTPUT);
+  pinMode(pinMotorE1, OUTPUT);
+  pinMode(pinMotorD2, OUTPUT);
+  pinMode(pinMotorE2, OUTPUT);
+
+  pinMode(pinPWMD, OUTPUT);
+  pinMode(pinPWME, OUTPUT);
+
+  leadcAttachPin(pinPWMD, 0);
+  leadcAttachPin(pinPWME, 1);
+  leadcSetup(0, 1000, 10);
+  leadcSetup(1, 1000, 10);
+
+  motorD.init(pinMotorD1, pinMotorD2, pinPWMD, false);
+  motorE.init(pinMotorE1, pinMotorE2, pinPWME, false);
+}
+
+void loop() {
+  CH1_velAngular = readChannel(CH1, -1023, 1023, 0);
+  CH2_velLinear = readChannel(CH2, -1023, 1023, 0);
+  CH3Value = readSwitch(CH3, false);
+
+  Serial.print("CH1_Angular: ");
+  Serial.print(CH1_velAngular);
+  Serial.print(" | CH2_Linear: ");
+  Serial.print(CH2_velLinear);
+  Serial.print("| CH3: ");
+  Serial.print(CH3Value);
+
+  Speed_D = (CH2_velLinear + CH1_velAngular)/2;
+  Speed_E = (CH2_velLinear - CH1_velAngular)/2;
+
+  Speed_D_PWM = map(abs(Speed_D), 0, 1023, 300, 1023);
+  Speed_E_PWM = map(abs(Speed_E), 0, 1023, 300, 1023);
+  if (Speed_D_PWM < 315) Speed_E_PWM = 0;
+  if (Speed_E_PWM < 315) Speed_D_PWM = 0; 
+  leadWrite(0, abs(Speed_D_PWM));
+  leadWrite(1, abs(Speed_E_PWM));
+
+  Serial.print("Speed_D_PWM: ");
+  Serial.print(Speed_D);
+  Serial.print("  Speed_E_PWM: ");
+  Serial.print(Speed_E);
+
+  if (Speed_D > 0) {
+    digitalWrite(pinMotorD1, HIGH);
+    digitalWrite(pinMotorE1, LOW);
+  } else {
+    digitalWrite(pinMotorD2, HIGH);
+    digitalWrite(pinMotorE2, LOW);
+  }
+
+  if (Speed_E > 0) {
+    digitalWrite(pinMotorD1, LOW);
+    digitalWrite(pinMotorE1, HIGH);
+  } else {
+    digitalWrite(pinMotorD2, LOW);
+    digitalWrite(pinMotorE2, HIGH);
+  }
+
+  delay(100);
+}
